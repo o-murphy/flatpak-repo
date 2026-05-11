@@ -1,0 +1,103 @@
+name: Publish to Flatpak Repo
+description: >
+  Download .flatpak bundles from a GitHub Release and import them into
+  the o-murphy/flatpak-repo OSTree repository hosted on GitHub Pages.
+
+inputs:
+  tag_name:
+    description: Release tag to download .flatpak files from (e.g. v0.1.13)
+    required: true
+  repository:
+    description: Source repository (owner/repo) to download .flatpak assets from
+    required: false
+    default: ${{ github.repository }}
+  gpg_private_key:
+    description: ASCII-armored GPG private key for signing the repo
+    required: true
+  gpg_passphrase:
+    description: Passphrase for the GPG private key
+    required: true
+  flatpak_repo_token:
+    description: Fine-grained PAT with Contents write access to o-murphy/flatpak-repo
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install flatpak + ostree
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y flatpak ostree
+
+    - name: Download .flatpak assets from GitHub Release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.flatpak_repo_token }}
+      run: |
+        mkdir -p dl
+        gh release download "${{ inputs.tag_name }}" \
+          --repo "${{ inputs.repository }}" \
+          --pattern "*.flatpak" \
+          --dir dl/
+        echo "Downloaded:"
+        ls -lh dl/
+
+    - name: Import GPG key
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
+        GPG_PASSPHRASE: ${{ inputs.gpg_passphrase }}
+      run: |
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format=long \
+          | grep '^sec' | head -1 | awk '{print $2}' | cut -d/ -f2)
+        echo "GPG_KEY_ID=$GPG_KEY_ID" >> $GITHUB_ENV
+        echo "$GPG_PASSPHRASE" | gpg --batch --passphrase-fd 0 \
+          --pinentry-mode loopback -u "$GPG_KEY_ID" --sign /dev/null 2>/dev/null || true
+
+    - name: Clone Flatpak repo
+      shell: bash
+      env:
+        FLATPAK_REPO_TOKEN: ${{ inputs.flatpak_repo_token }}
+      run: |
+        git clone \
+          "https://x-access-token:${FLATPAK_REPO_TOKEN}@github.com/o-murphy/flatpak-repo.git" \
+          /tmp/flatpak-repo
+
+    - name: Initialize OSTree repo if empty
+      shell: bash
+      run: |
+        if [ ! -f /tmp/flatpak-repo/config ]; then
+          ostree init --mode=archive-z2 --repo=/tmp/flatpak-repo
+        fi
+
+    - name: Import .flatpak bundles into OSTree repo
+      shell: bash
+      run: |
+        for f in dl/*.flatpak; do
+          [ -f "$f" ] || continue
+          echo "Importing $f …"
+          flatpak build-import-bundle /tmp/flatpak-repo "$f"
+        done
+
+    - name: Sign and update repo
+      shell: bash
+      run: |
+        flatpak build-sign /tmp/flatpak-repo --gpg-sign="$GPG_KEY_ID"
+        flatpak build-update-repo /tmp/flatpak-repo \
+          --gpg-sign="$GPG_KEY_ID" \
+          --generate-static-deltas
+
+    - name: Push to flatpak-repo
+      shell: bash
+      env:
+        FLATPAK_REPO_TOKEN: ${{ inputs.flatpak_repo_token }}
+      run: |
+        cd /tmp/flatpak-repo
+        git config user.name "o-murphy"
+        git config user.email "thehelixpg@gmail.com"
+        git add -A
+        git diff --cached --quiet && echo "No changes" && exit 0
+        git commit -m "Update ${{ inputs.repository }} to ${{ inputs.tag_name }}"
+        git push "https://x-access-token:${FLATPAK_REPO_TOKEN}@github.com/o-murphy/flatpak-repo.git"
