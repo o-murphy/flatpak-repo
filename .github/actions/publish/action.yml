@@ -106,7 +106,7 @@ runs:
           echo 'Homepage=https://github.com/o-murphy/flatpak-repo'
           echo 'Description=Self-hosted Flatpak repository for apps by o-murphy'
           echo "GPGKey=${GPG_PUBLIC_KEY}"
-        } > /tmp/flatpak-repo/ebalistyka.flatpakrepo
+        } > /tmp/flatpak-repo/o_murphy.flatpakrepo
 
     - name: Push to flatpak-repo
       shell: bash
