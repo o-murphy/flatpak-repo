@@ -98,6 +98,15 @@ runs:
         flatpak build-update-repo /tmp/flatpak-repo \
           --gpg-sign="$GPG_KEY_ID" \
           --generate-static-deltas
+        GPG_PUBLIC_KEY=$(gpg --export "$GPG_KEY_ID" | base64 -w 0)
+        {
+          echo '[Flatpak Repo]'
+          echo 'Title=o-murphy Flatpak Repository'
+          echo 'Url=https://o-murphy.github.io/flatpak-repo/'
+          echo 'Homepage=https://github.com/o-murphy/flatpak-repo'
+          echo 'Description=Self-hosted Flatpak repository for apps by o-murphy'
+          echo "GPGKey=${GPG_PUBLIC_KEY}"
+        } > /tmp/flatpak-repo/ebalistyka.flatpakrepo
 
     - name: Push to flatpak-repo
       shell: bash
