@@ -81,6 +81,7 @@ runs:
         if [ ! -f /tmp/flatpak-repo/config ]; then
           ostree init --mode=archive-z2 --repo=/tmp/flatpak-repo
         fi
+        mkdir -p /tmp/flatpak-repo/refs/remotes
 
     - name: Import .flatpak bundles into OSTree repo
       shell: bash
