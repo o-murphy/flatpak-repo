@@ -1,0 +1,5 @@
+[Flatpak Repo]
+Title=o-murphy Flatpak Repository
+Url=https://o-murphy.github.io/flatpak-repo/
+Homepage=https://github.com/o-murphy/flatpak-repo
+Description=Self-hosted Flatpak repository for apps by o-murphy
