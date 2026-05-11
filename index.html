@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>o-murphy Flatpak Repository</title>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 48px auto; padding: 0 16px; color: #222; }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    pre { background: #f4f4f4; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: .9rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e0e0e0; }
+    th { font-size: .85rem; color: #555; }
+    a { color: #0969da; }
+    .badge { font-size: .75rem; background: #e8f4fd; color: #0969da; padding: 2px 8px; border-radius: 12px; }
+  </style>
+</head>
+<body>
+  <h1>o-murphy Flatpak Repository</h1>
+  <p>Self-hosted Flatpak repository for apps by <a href="https://github.com/o-murphy">o-murphy</a>.</p>
+
+  <h2>Add this repository</h2>
+  <pre>flatpak remote-add --if-not-exists o-murphy https://o-murphy.github.io/flatpak-repo/ebalistyka.flatpakrepo</pre>
+
+  <h2>Apps</h2>
+  <table>
+    <thead>
+      <tr><th>App</th><th>ID</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="https://github.com/o-murphy/ebalistyka-app">eBalistyka</a> <span class="badge">stable</span></td>
+        <td><code>io.github.o_murphy.ebalistyka</code></td>
+        <td>Ballistic trajectory calculator</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Install eBalistyka</h2>
+  <pre>flatpak install o-murphy io.github.o_murphy.ebalistyka</pre>
+</body>
+</html>
