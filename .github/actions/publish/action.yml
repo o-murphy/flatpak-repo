@@ -93,7 +93,8 @@ runs:
       env:
         FLATPAK_REPO_TOKEN: ${{ inputs.flatpak_repo_token }}
       run: |
-        cd /tmp/flatpak-repo
+        export GIT_DIR=/tmp/flatpak-repo/.git
+        export GIT_WORK_TREE=/tmp/flatpak-repo
         git config user.name "o-murphy"
         git config user.email "thehelixpg@gmail.com"
         git add -A
