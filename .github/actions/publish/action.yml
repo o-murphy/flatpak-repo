@@ -53,7 +53,6 @@ runs:
         GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format=long \
           | grep '^sec' | head -1 | awk '{print $2}' | cut -d/ -f2)
         echo "GPG_KEY_ID=$GPG_KEY_ID" >> $GITHUB_ENV
-        # Preset passphrase in agent so flatpak build-sign can work without TTY
         mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
         echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
         gpgconf --reload gpg-agent
@@ -63,6 +62,18 @@ runs:
           | while read -r KEYGRIP; do
               echo "$GPG_PASSPHRASE" | "${LIBEXEC}/gpg-preset-passphrase" --preset "$KEYGRIP"
             done
+
+    - name: Clone Flatpak repo
+      shell: bash
+      env:
+        FLATPAK_REPO_TOKEN: ${{ inputs.flatpak_repo_token }}
+      run: |
+        # --separate-git-dir puts git internals outside the working tree so
+        # OSTree's objects/ refs/ config don't clash with git's directory detection
+        git clone \
+          --separate-git-dir=/tmp/flatpak-repo-git \
+          "https://x-access-token:${FLATPAK_REPO_TOKEN}@github.com/o-murphy/flatpak-repo.git" \
+          /tmp/flatpak-repo
 
     - name: Initialize OSTree repo if empty
       shell: bash
@@ -93,8 +104,7 @@ runs:
       env:
         FLATPAK_REPO_TOKEN: ${{ inputs.flatpak_repo_token }}
       run: |
-        export GIT_DIR=/tmp/flatpak-repo/.git
-        export GIT_WORK_TREE=/tmp/flatpak-repo
+        cd /tmp/flatpak-repo
         git config user.name "o-murphy"
         git config user.email "thehelixpg@gmail.com"
         git add -A
