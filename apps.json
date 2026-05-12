@@ -1,8 +1,11 @@
 [
   {
     "id": "io.github.o_murphy.ebalistyka",
+    "name": "eBalistyka",
+    "description": "eBalistyka is a professional ballistic calculator for shooters.\n      Supports trajectory calculation, wind drift, multiple ammo profiles,\n      and custom reticle overlays.",
     "branch": "stable",
     "version": "v0.1.13",
+    "source_repo": null,
     "arches": [
       "aarch64",
       "x86_64"
