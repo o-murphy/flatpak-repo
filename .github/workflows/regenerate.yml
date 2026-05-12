@@ -1,0 +1,138 @@
+name: Regenerate apps.json
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ostree + flatpak
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ostree flatpak
+
+      - name: Regenerate apps.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/regen.py << 'PYEOF'
+          import subprocess, json, re, os, sys
+          import xml.etree.ElementTree as ET
+
+          REPO = '.'
+
+          def get_appstream(repo, ref, app_id):
+              paths = [
+                  f'/export/share/metainfo/{app_id}.metainfo.xml',
+                  f'/export/share/appdata/{app_id}.appdata.xml',
+                  f'/files/share/metainfo/{app_id}.metainfo.xml',
+                  f'/files/share/appdata/{app_id}.appdata.xml',
+              ]
+              for path in paths:
+                  try:
+                      xml = subprocess.check_output(
+                          ['ostree', 'cat', '--repo', repo, ref, path],
+                          stderr=subprocess.DEVNULL
+                      ).decode()
+                      root = ET.fromstring(xml)
+                      name = next((el.text for el in root.findall('name')
+                                   if el.get('{http://www.w3.org/XML/1998/namespace}lang') is None), None)
+                      desc_el = root.find('description')
+                      desc = None
+                      if desc_el is not None:
+                          p = desc_el.find('p')
+                          if p is not None and p.text:
+                              desc = p.text.strip()
+                      return name, desc
+                  except Exception:
+                      continue
+              return None, None
+
+          def latest_release(source_repo):
+              try:
+                  tag = subprocess.check_output(
+                      ['gh', 'release', 'view', '--repo', source_repo,
+                       '--json', 'tagName', '-q', '.tagName'],
+                      stderr=subprocess.DEVNULL
+                  ).decode().strip()
+                  return tag or None
+              except Exception:
+                  return None
+
+          existing = {}
+          if os.path.exists('apps.json'):
+              with open('apps.json') as f:
+                  for app in json.load(f):
+                      existing[f"{app['id']}/{app['branch']}"] = app
+
+          refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
+
+          apps = {}
+          for ref in refs:
+              ref = ref.strip()
+              if not ref.startswith('app/'):
+                  continue
+              parts = ref.split('/')
+              if len(parts) != 4:
+                  continue
+              _, app_id, arch, branch = parts
+
+              try:
+                  meta = subprocess.check_output(
+                      ['ostree', 'cat', '--repo', REPO, ref, '/metadata']
+                  ).decode()
+              except subprocess.CalledProcessError:
+                  continue
+
+              m = re.search(r'^runtime=(.+)$', meta, re.MULTILINE)
+              runtime = None
+              if m:
+                  rparts = m.group(1).split('/')
+                  runtime = f'{rparts[0]}/{rparts[-1]}'
+
+              key = f'{app_id}/{branch}'
+              ex = existing.get(key, {})
+
+              if key not in apps:
+                  name, description = get_appstream(REPO, ref, app_id)
+                  source_repo = ex.get('source_repo')
+                  version = latest_release(source_repo) if source_repo else ex.get('version', 'unknown')
+
+                  apps[key] = {
+                      'id': app_id,
+                      'name': name or ex.get('name'),
+                      'description': description or ex.get('description'),
+                      'branch': branch,
+                      'version': version,
+                      'source_repo': source_repo,
+                      'arches': [],
+                      'runtime': runtime,
+                      'runtime_remote': ex.get('runtime_remote', 'flathub'),
+                  }
+
+              if arch not in apps[key]['arches']:
+                  apps[key]['arches'].append(arch)
+
+          result = list(apps.values())
+          with open('apps.json', 'w') as f:
+              json.dump(result, f, indent=2)
+          print(json.dumps(result, indent=2))
+          PYEOF
+          python3 /tmp/regen.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps.json
+          git diff --cached --quiet && echo "No changes, skipping commit" && exit 0
+          git commit -m "Regenerate apps.json [skip ci]"
+          git push
