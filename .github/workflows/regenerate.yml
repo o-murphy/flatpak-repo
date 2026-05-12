@@ -126,6 +126,7 @@ jobs:
               json.dump(result, f, indent=2)
           print(json.dumps(result, indent=2))
           PYEOF
+          mkdir -p refs/remotes
           python3 /tmp/regen.py
 
       - name: Commit if changed
