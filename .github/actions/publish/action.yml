@@ -114,11 +114,39 @@ runs:
       run: |
         cat > /tmp/gen_apps.py << 'PYEOF'
         import subprocess, json, re, sys
+        import xml.etree.ElementTree as ET
 
         REPO = '/tmp/flatpak-repo'
         TAG  = sys.argv[1]
 
         refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
+
+        def get_appstream(repo, ref, app_id):
+            paths = [
+                f'/export/share/metainfo/{app_id}.metainfo.xml',
+                f'/export/share/appdata/{app_id}.appdata.xml',
+                f'/files/share/metainfo/{app_id}.metainfo.xml',
+                f'/files/share/appdata/{app_id}.appdata.xml',
+            ]
+            for path in paths:
+                try:
+                    xml = subprocess.check_output(
+                        ['ostree', 'cat', '--repo', repo, ref, path],
+                        stderr=subprocess.DEVNULL
+                    ).decode()
+                    root = ET.fromstring(xml)
+                    name = next((el.text for el in root.findall('name')
+                                 if el.get('{http://www.w3.org/XML/1998/namespace}lang') is None), None)
+                    desc_el = root.find('description')
+                    desc = None
+                    if desc_el is not None:
+                        p = desc_el.find('p')
+                        if p is not None and p.text:
+                            desc = p.text.strip()
+                    return name, desc
+                except Exception:
+                    continue
+            return None, None
 
         apps = {}
         for ref in refs:
@@ -141,13 +169,15 @@ runs:
             runtime = None
             if m:
                 rparts = m.group(1).split('/')
-                # drop arch: org.gnome.Platform/x86_64/49 → org.gnome.Platform/49
                 runtime = f'{rparts[0]}/{rparts[-1]}'
 
             key = f'{app_id}/{branch}'
             if key not in apps:
+                name, description = get_appstream(REPO, ref, app_id)
                 apps[key] = {
                     'id': app_id,
+                    'name': name,
+                    'description': description,
                     'branch': branch,
                     'version': TAG,
                     'arches': [],
