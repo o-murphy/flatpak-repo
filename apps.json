@@ -1,0 +1,13 @@
+[
+  {
+    "id": "io.github.o_murphy.ebalistyka",
+    "branch": "stable",
+    "version": "v0.1.13",
+    "arches": [
+      "aarch64",
+      "x86_64"
+    ],
+    "runtime": "org.gnome.Platform/49",
+    "runtime_remote": "flathub"
+  }
+]
