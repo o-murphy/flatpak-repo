@@ -114,10 +114,12 @@ jobs:
                       'description': description or ex.get('description'),
                       'branch': branch,
                       'version': version,
+                      'commit': ex.get('commit'),
                       'source_repo': source_repo,
                       'arches': [],
                       'runtime': runtime,
                       'runtime_remote': ex.get('runtime_remote', 'flathub'),
+                      'versions': ex.get('versions', []),
                   }
 
               if arch not in apps[app_id]['arches']:
