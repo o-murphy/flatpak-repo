@@ -261,25 +261,23 @@ runs:
                 runtime = f'{rparts[0]}/{rparts[-1]}'
 
             ex = existing.get(app_id, {})
+            is_imported = app_id in IMPORTED_IDS
             key = app_id
 
             if key not in apps:
                 name, description = get_appstream(REPO, ref, app_id)
-                is_imported = app_id in IMPORTED_IDS
 
                 if is_imported:
-                    commit = get_commit(REPO, ref)
                     version = TAG
                     source_repo = SOURCE_REPO
-                    # Prepend new entry to versions history, keep last 10
-                    new_entry = {'version': TAG, 'commit': commit}
                     old_versions = ex.get('versions', [])
+                    new_entry = {'version': TAG, 'commits': {}}
                     if not old_versions or old_versions[0].get('version') != TAG:
                         versions = ([new_entry] + old_versions)[:10]
                     else:
-                        versions = old_versions
+                        # Same version re-published: reset commits to rebuild
+                        versions = [{'version': TAG, 'commits': {}}] + old_versions[1:]
                 else:
-                    commit = ex.get('commit')
                     version = ex.get('version', 'unknown')
                     source_repo = ex.get('source_repo')
                     versions = ex.get('versions', [])
@@ -290,7 +288,7 @@ runs:
                     'description': description or ex.get('description'),
                     'branch': branch,
                     'version': version,
-                    'commit': commit,
+                    'commits': {},
                     'source_repo': source_repo,
                     'arches': [],
                     'runtime': runtime,
@@ -300,6 +298,16 @@ runs:
 
             if arch not in apps[key]['arches']:
                 apps[key]['arches'].append(arch)
+
+            # Store commit hash keyed by arch
+            if is_imported:
+                commit = get_commit(REPO, ref)
+                apps[key]['commits'][arch] = commit
+                if apps[key]['versions']:
+                    apps[key]['versions'][0]['commits'][arch] = commit
+            else:
+                ex_commits = ex.get('commits', {})
+                apps[key]['commits'][arch] = ex_commits.get(arch)
 
         with open(apps_json_path, 'w') as f:
             json.dump(apps, f, indent=2)

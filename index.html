@@ -135,25 +135,46 @@
     function versionsBlock(app) {
       const versions = app.versions || [];
       if (versions.length === 0) return '';
+
       const rows = versions.map((v, i) => {
         const isCurrent = i === 0;
-        const shortHash = v.commit ? v.commit.slice(0, 12) : null;
-        const rollbackCmd = v.commit
-          ? `flatpak update --commit=${v.commit} ${app.id}`
-          : null;
-        return `
-          <tr class="border-t border-gray-200 dark:border-gray-700">
-            <td class="py-2 pr-4">
-              <span class="badge-${isCurrent ? 'green' : 'gray'}">${v.version || '?'}</span>
-              ${isCurrent ? '<span class="text-xs muted ml-1">current</span>' : ''}
-            </td>
-            <td class="py-2 pr-4 font-mono text-xs muted">${shortHash || '—'}</td>
-            <td class="py-2">
-              ${rollbackCmd && !isCurrent
-                ? `<div class="cmd-wrap">${`<code class="cmd text-xs py-1.5">${rollbackCmd}</code><button class="copy-btn text-xs py-1.5" onclick="copy(this)">Copy</button>`}</div>`
-                : '<span class="text-xs muted">—</span>'}
-            </td>
-          </tr>`;
+        const commits = v.commits || {};
+        const arches = Object.keys(commits);
+
+        if (arches.length === 0) {
+          return `
+            <tr class="border-t border-gray-200 dark:border-gray-700">
+              <td class="py-2 pr-4" rowspan="1">
+                <span class="badge-${isCurrent ? 'green' : 'gray'}">${v.version || '?'}</span>
+                ${isCurrent ? '<span class="text-xs muted ml-1">current</span>' : ''}
+              </td>
+              <td class="py-2 pr-4 font-mono text-xs muted">—</td>
+              <td class="py-2 font-mono text-xs muted">—</td>
+              <td class="py-2"><span class="text-xs muted">—</span></td>
+            </tr>`;
+        }
+
+        return arches.map((arch, ai) => {
+          const hash = commits[arch];
+          const shortHash = hash ? hash.slice(0, 12) : null;
+          const rollbackCmd = hash && !isCurrent
+            ? `flatpak update --commit=${hash} ${app.id}`
+            : null;
+          return `
+            <tr class="border-t border-gray-200 dark:border-gray-700">
+              ${ai === 0 ? `<td class="py-2 pr-4 align-top" rowspan="${arches.length}">
+                <span class="badge-${isCurrent ? 'green' : 'gray'}">${v.version || '?'}</span>
+                ${isCurrent ? '<span class="text-xs muted ml-1">current</span>' : ''}
+              </td>` : ''}
+              <td class="py-2 pr-3"><span class="badge-gray">${arch}</span></td>
+              <td class="py-2 pr-4 font-mono text-xs muted">${shortHash || '—'}</td>
+              <td class="py-2">
+                ${rollbackCmd
+                  ? `<div class="cmd-wrap"><code class="cmd text-xs py-1.5">${rollbackCmd}</code><button class="copy-btn text-xs py-1.5" onclick="copy(this)">Copy</button></div>`
+                  : '<span class="text-xs muted">—</span>'}
+              </td>
+            </tr>`;
+        }).join('');
       }).join('');
 
       return `
@@ -170,6 +191,7 @@
               <thead>
                 <tr class="text-left">
                   <th class="pb-2 pr-4 text-xs font-semibold muted uppercase tracking-wide">Version</th>
+                  <th class="pb-2 pr-3 text-xs font-semibold muted uppercase tracking-wide">Arch</th>
                   <th class="pb-2 pr-4 text-xs font-semibold muted uppercase tracking-wide">Commit</th>
                   <th class="pb-2 text-xs font-semibold muted uppercase tracking-wide">Rollback command</th>
                 </tr>
