@@ -109,6 +109,61 @@ runs:
           echo "GPGKey=${GPG_PUBLIC_KEY}"
         } > /tmp/flatpak-repo/o_murphy.flatpakrepo
 
+    - name: Generate apps.json
+      shell: bash
+      run: |
+        cat > /tmp/gen_apps.py << 'PYEOF'
+        import subprocess, json, re, sys
+
+        REPO = '/tmp/flatpak-repo'
+        TAG  = sys.argv[1]
+
+        refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
+
+        apps = {}
+        for ref in refs:
+            ref = ref.strip()
+            if not ref.startswith('app/'):
+                continue
+            parts = ref.split('/')
+            if len(parts) != 4:
+                continue
+            _, app_id, arch, branch = parts
+
+            try:
+                meta = subprocess.check_output(
+                    ['ostree', 'cat', '--repo', REPO, ref, '/metadata']
+                ).decode()
+            except subprocess.CalledProcessError:
+                continue
+
+            m = re.search(r'^runtime=(.+)$', meta, re.MULTILINE)
+            runtime = None
+            if m:
+                rparts = m.group(1).split('/')
+                # drop arch: org.gnome.Platform/x86_64/49 → org.gnome.Platform/49
+                runtime = f'{rparts[0]}/{rparts[-1]}'
+
+            key = f'{app_id}/{branch}'
+            if key not in apps:
+                apps[key] = {
+                    'id': app_id,
+                    'branch': branch,
+                    'version': TAG,
+                    'arches': [],
+                    'runtime': runtime,
+                    'runtime_remote': 'flathub',
+                }
+            if arch not in apps[key]['arches']:
+                apps[key]['arches'].append(arch)
+
+        result = list(apps.values())
+        with open(f'{REPO}/apps.json', 'w') as f:
+            json.dump(result, f, indent=2)
+        print(json.dumps(result, indent=2))
+        PYEOF
+        python3 /tmp/gen_apps.py "${{ inputs.tag_name }}"
+
     - name: Push to flatpak-repo
       shell: bash
       env:
