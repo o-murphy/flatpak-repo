@@ -86,11 +86,77 @@ runs:
     - name: Import .flatpak bundles into OSTree repo
       shell: bash
       run: |
+        # Save ref→commit snapshot to file (used by reparent step too)
+        ostree refs --repo=/tmp/flatpak-repo 2>/dev/null \
+          | grep '^app/' \
+          | while IFS= read -r ref; do
+              commit=$(ostree rev-parse --repo=/tmp/flatpak-repo "$ref" 2>/dev/null || true)
+              printf '%s\t%s\n' "$ref" "$commit"
+            done > /tmp/before_hashes.txt
+
+        declare -A BEFORE
+        while IFS=$'\t' read -r ref commit; do
+          BEFORE["$ref"]="$commit"
+        done < /tmp/before_hashes.txt
+
         for f in dl/*.flatpak; do
           [ -f "$f" ] || continue
           echo "Importing $f …"
           flatpak build-import-bundle /tmp/flatpak-repo "$f"
         done
+
+        # Collect app IDs whose OSTree ref commit changed (new or updated)
+        IMPORTED_APP_IDS=""
+        while IFS= read -r ref; do
+          [[ "$ref" == app/* ]] || continue
+          IFS='/' read -r _ app_id _ _ <<< "$ref"
+          after=$(ostree rev-parse --repo=/tmp/flatpak-repo "$ref" 2>/dev/null || true)
+          if [[ "$after" != "${BEFORE[$ref]:-}" ]]; then
+            IMPORTED_APP_IDS="$IMPORTED_APP_IDS $app_id"
+          fi
+        done < <(ostree refs --repo=/tmp/flatpak-repo 2>/dev/null || true)
+
+        IMPORTED_APP_IDS=$(echo "$IMPORTED_APP_IDS" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
+        echo "IMPORTED_APP_IDS=$IMPORTED_APP_IDS" >> "$GITHUB_ENV"
+        echo "Detected imported app IDs: $IMPORTED_APP_IDS"
+
+    - name: Reparent imported commits
+      shell: bash
+      run: |
+        # Restore before-hashes saved by import step
+        declare -A BEFORE_COMMITS
+        if [ -f /tmp/before_hashes.txt ]; then
+          while IFS=$'\t' read -r ref commit; do
+            [ -n "$commit" ] && BEFORE_COMMITS["$ref"]="$commit"
+          done < /tmp/before_hashes.txt
+        fi
+
+        while IFS= read -r ref; do
+          [[ "$ref" == app/* ]] || continue
+
+          old_commit="${BEFORE_COMMITS[$ref]:-}"
+          [ -n "$old_commit" ] || continue  # first-ever import, no parent to set
+
+          new_commit=$(ostree rev-parse --repo=/tmp/flatpak-repo "$ref" 2>/dev/null || true)
+          [ -n "$new_commit" ] || continue
+          [[ "$new_commit" == "$old_commit" ]] && continue  # ref unchanged
+
+          subject=$(ostree show --repo=/tmp/flatpak-repo "$new_commit" 2>/dev/null \
+            | grep -m1 "^Subject:" | sed 's/^Subject: //' \
+            || echo "Export")
+
+          reparented=$(ostree commit \
+            --repo=/tmp/flatpak-repo \
+            --branch="$ref" \
+            --tree=ref="$ref" \
+            --parent="$old_commit" \
+            --subject="$subject")
+
+          echo "Reparented $ref"
+          echo "  parent:     $old_commit"
+          echo "  old commit: $new_commit"
+          echo "  new commit: $reparented"
+        done < <(ostree refs --repo=/tmp/flatpak-repo 2>/dev/null || true)
 
     - name: Sign and update repo
       shell: bash
@@ -113,12 +179,25 @@ runs:
       shell: bash
       run: |
         cat > /tmp/gen_apps.py << 'PYEOF'
-        import subprocess, json, re, sys
+        import subprocess, json, re, sys, os
         import xml.etree.ElementTree as ET
 
-        REPO        = '/tmp/flatpak-repo'
-        TAG         = sys.argv[1]
-        SOURCE_REPO = sys.argv[2]
+        REPO         = '/tmp/flatpak-repo'
+        TAG          = sys.argv[1]
+        SOURCE_REPO  = sys.argv[2]
+        # Space-separated list of app IDs that were actually imported this run
+        IMPORTED_IDS = set(sys.argv[3].split()) if len(sys.argv) > 3 and sys.argv[3] else set()
+
+        # Load existing apps.json to preserve metadata for unrelated apps
+        existing = {}
+        apps_json_path = f'{REPO}/apps.json'
+        if os.path.exists(apps_json_path):
+            with open(apps_json_path) as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    existing = {a['id']: a for a in data if 'id' in a}
+                elif isinstance(data, dict):
+                    existing = data
 
         refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
 
@@ -149,6 +228,15 @@ runs:
                     continue
             return None, None
 
+        def get_commit(repo, ref):
+            try:
+                return subprocess.check_output(
+                    ['ostree', 'rev-parse', '--repo', repo, ref],
+                    stderr=subprocess.DEVNULL
+                ).decode().strip()
+            except Exception:
+                return None
+
         apps = {}
         for ref in refs:
             ref = ref.strip()
@@ -172,28 +260,52 @@ runs:
                 rparts = m.group(1).split('/')
                 runtime = f'{rparts[0]}/{rparts[-1]}'
 
+            ex = existing.get(app_id, {})
             key = app_id
+
             if key not in apps:
                 name, description = get_appstream(REPO, ref, app_id)
+                is_imported = app_id in IMPORTED_IDS
+
+                if is_imported:
+                    commit = get_commit(REPO, ref)
+                    version = TAG
+                    source_repo = SOURCE_REPO
+                    # Prepend new entry to versions history, keep last 10
+                    new_entry = {'version': TAG, 'commit': commit}
+                    old_versions = ex.get('versions', [])
+                    if not old_versions or old_versions[0].get('version') != TAG:
+                        versions = ([new_entry] + old_versions)[:10]
+                    else:
+                        versions = old_versions
+                else:
+                    commit = ex.get('commit')
+                    version = ex.get('version', 'unknown')
+                    source_repo = ex.get('source_repo')
+                    versions = ex.get('versions', [])
+
                 apps[key] = {
                     'id': app_id,
-                    'name': name,
-                    'description': description,
+                    'name': name or ex.get('name'),
+                    'description': description or ex.get('description'),
                     'branch': branch,
-                    'version': TAG,
-                    'source_repo': SOURCE_REPO,
+                    'version': version,
+                    'commit': commit,
+                    'source_repo': source_repo,
                     'arches': [],
                     'runtime': runtime,
-                    'runtime_remote': 'flathub',
+                    'runtime_remote': ex.get('runtime_remote', 'flathub'),
+                    'versions': versions,
                 }
+
             if arch not in apps[key]['arches']:
                 apps[key]['arches'].append(arch)
 
-        with open(f'{REPO}/apps.json', 'w') as f:
+        with open(apps_json_path, 'w') as f:
             json.dump(apps, f, indent=2)
         print(json.dumps(apps, indent=2))
         PYEOF
-        python3 /tmp/gen_apps.py "${{ inputs.tag_name }}" "${{ inputs.repository }}"
+        python3 /tmp/gen_apps.py "${{ inputs.tag_name }}" "${{ inputs.repository }}" "$IMPORTED_APP_IDS"
 
     - name: Push to flatpak-repo
       shell: bash
