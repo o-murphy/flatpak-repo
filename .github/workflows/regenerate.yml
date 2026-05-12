@@ -114,7 +114,7 @@ jobs:
                       'description': description or ex.get('description'),
                       'branch': branch,
                       'version': version,
-                      'commits': ex.get('commits', {}),
+                      'commits': {},
                       'source_repo': source_repo,
                       'arches': [],
                       'runtime': runtime,
@@ -124,6 +124,15 @@ jobs:
 
               if arch not in apps[app_id]['arches']:
                   apps[app_id]['arches'].append(arch)
+
+              try:
+                  commit = subprocess.check_output(
+                      ['ostree', 'rev-parse', '--repo', REPO, ref],
+                      stderr=subprocess.DEVNULL
+                  ).decode().strip()
+                  apps[app_id]['commits'][arch] = commit
+              except Exception:
+                  pass
 
           with open('apps.json', 'w') as f:
               json.dump(apps, f, indent=2)
