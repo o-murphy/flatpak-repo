@@ -86,13 +86,18 @@ runs:
     - name: Import .flatpak bundles into OSTree repo
       shell: bash
       run: |
-        # Snapshot ref→commit before import so we can detect what changed
+        # Save ref→commit snapshot to file (used by reparent step too)
+        ostree refs --repo=/tmp/flatpak-repo 2>/dev/null \
+          | grep '^app/' \
+          | while IFS= read -r ref; do
+              commit=$(ostree rev-parse --repo=/tmp/flatpak-repo "$ref" 2>/dev/null || true)
+              printf '%s\t%s\n' "$ref" "$commit"
+            done > /tmp/before_hashes.txt
+
         declare -A BEFORE
-        while IFS= read -r ref; do
-          [[ "$ref" == app/* ]] || continue
-          commit=$(ostree rev-parse --repo=/tmp/flatpak-repo "$ref" 2>/dev/null || true)
+        while IFS=$'\t' read -r ref commit; do
           BEFORE["$ref"]="$commit"
-        done < <(ostree refs --repo=/tmp/flatpak-repo 2>/dev/null || true)
+        done < /tmp/before_hashes.txt
 
         for f in dl/*.flatpak; do
           [ -f "$f" ] || continue
@@ -114,6 +119,44 @@ runs:
         IMPORTED_APP_IDS=$(echo "$IMPORTED_APP_IDS" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
         echo "IMPORTED_APP_IDS=$IMPORTED_APP_IDS" >> "$GITHUB_ENV"
         echo "Detected imported app IDs: $IMPORTED_APP_IDS"
+
+    - name: Reparent imported commits
+      shell: bash
+      run: |
+        # Restore before-hashes saved by import step
+        declare -A BEFORE_COMMITS
+        if [ -f /tmp/before_hashes.txt ]; then
+          while IFS=$'\t' read -r ref commit; do
+            [ -n "$commit" ] && BEFORE_COMMITS["$ref"]="$commit"
+          done < /tmp/before_hashes.txt
+        fi
+
+        while IFS= read -r ref; do
+          [[ "$ref" == app/* ]] || continue
+
+          old_commit="${BEFORE_COMMITS[$ref]:-}"
+          [ -n "$old_commit" ] || continue  # first-ever import, no parent to set
+
+          new_commit=$(ostree rev-parse --repo=/tmp/flatpak-repo "$ref" 2>/dev/null || true)
+          [ -n "$new_commit" ] || continue
+          [[ "$new_commit" == "$old_commit" ]] && continue  # ref unchanged
+
+          subject=$(ostree show --repo=/tmp/flatpak-repo "$new_commit" 2>/dev/null \
+            | grep -m1 "^Subject:" | sed 's/^Subject: //' \
+            || echo "Export")
+
+          reparented=$(ostree commit \
+            --repo=/tmp/flatpak-repo \
+            --branch="$ref" \
+            --tree=ref="$ref" \
+            --parent="$old_commit" \
+            --subject="$subject")
+
+          echo "Reparented $ref"
+          echo "  parent:     $old_commit"
+          echo "  old commit: $new_commit"
+          echo "  new commit: $reparented"
+        done < <(ostree refs --repo=/tmp/flatpak-repo 2>/dev/null || true)
 
     - name: Sign and update repo
       shell: bash
