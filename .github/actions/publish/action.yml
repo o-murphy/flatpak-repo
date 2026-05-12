@@ -172,7 +172,7 @@ runs:
                 rparts = m.group(1).split('/')
                 runtime = f'{rparts[0]}/{rparts[-1]}'
 
-            key = f'{app_id}/{branch}'
+            key = app_id
             if key not in apps:
                 name, description = get_appstream(REPO, ref, app_id)
                 apps[key] = {
@@ -189,10 +189,9 @@ runs:
             if arch not in apps[key]['arches']:
                 apps[key]['arches'].append(arch)
 
-        result = list(apps.values())
         with open(f'{REPO}/apps.json', 'w') as f:
-            json.dump(result, f, indent=2)
-        print(json.dumps(result, indent=2))
+            json.dump(apps, f, indent=2)
+        print(json.dumps(apps, indent=2))
         PYEOF
         python3 /tmp/gen_apps.py "${{ inputs.tag_name }}" "${{ inputs.repository }}"
 

@@ -208,7 +208,8 @@
       try {
         const res = await fetch('apps.json');
         if (!res.ok) throw new Error();
-        apps = await res.json();
+        const data = await res.json();
+        apps = Array.isArray(data) ? data : Object.values(data);
       } catch {
         list.innerHTML = '<p class="text-red-500 text-sm">Could not load apps.json — run the publish workflow first.</p>';
         return;

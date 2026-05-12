@@ -70,8 +70,7 @@ jobs:
           existing = {}
           if os.path.exists('apps.json'):
               with open('apps.json') as f:
-                  for app in json.load(f):
-                      existing[f"{app['id']}/{app['branch']}"] = app
+                  existing = json.load(f)
 
           refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
 
@@ -98,15 +97,14 @@ jobs:
                   rparts = m.group(1).split('/')
                   runtime = f'{rparts[0]}/{rparts[-1]}'
 
-              key = f'{app_id}/{branch}'
-              ex = existing.get(key, {})
+              ex = existing.get(app_id, {})
 
-              if key not in apps:
+              if app_id not in apps:
                   name, description = get_appstream(REPO, ref, app_id)
                   source_repo = ex.get('source_repo')
                   version = latest_release(source_repo) if source_repo else ex.get('version', 'unknown')
 
-                  apps[key] = {
+                  apps[app_id] = {
                       'id': app_id,
                       'name': name or ex.get('name'),
                       'description': description or ex.get('description'),
@@ -118,13 +116,12 @@ jobs:
                       'runtime_remote': ex.get('runtime_remote', 'flathub'),
                   }
 
-              if arch not in apps[key]['arches']:
-                  apps[key]['arches'].append(arch)
+              if arch not in apps[app_id]['arches']:
+                  apps[app_id]['arches'].append(arch)
 
-          result = list(apps.values())
           with open('apps.json', 'w') as f:
-              json.dump(result, f, indent=2)
-          print(json.dumps(result, indent=2))
+              json.dump(apps, f, indent=2)
+          print(json.dumps(apps, indent=2))
           PYEOF
           mkdir -p refs/remotes
           python3 /tmp/regen.py
