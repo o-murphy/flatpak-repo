@@ -116,8 +116,9 @@ runs:
         import subprocess, json, re, sys
         import xml.etree.ElementTree as ET
 
-        REPO = '/tmp/flatpak-repo'
-        TAG  = sys.argv[1]
+        REPO        = '/tmp/flatpak-repo'
+        TAG         = sys.argv[1]
+        SOURCE_REPO = sys.argv[2]
 
         refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
 
@@ -180,6 +181,7 @@ runs:
                     'description': description,
                     'branch': branch,
                     'version': TAG,
+                    'source_repo': SOURCE_REPO,
                     'arches': [],
                     'runtime': runtime,
                     'runtime_remote': 'flathub',
@@ -192,7 +194,7 @@ runs:
             json.dump(result, f, indent=2)
         print(json.dumps(result, indent=2))
         PYEOF
-        python3 /tmp/gen_apps.py "${{ inputs.tag_name }}"
+        python3 /tmp/gen_apps.py "${{ inputs.tag_name }}" "${{ inputs.repository }}"
 
     - name: Push to flatpak-repo
       shell: bash
