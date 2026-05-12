@@ -123,14 +123,9 @@
       return `<div class="cmd">${text}<button class="copy-btn" onclick="copy(this)">Copy</button></div>`;
     }
 
-    function appName(id) {
-      const part = id.split('.').pop();
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    }
-
     // ── Render ─────────────────────────────────────────────────────────────
     function renderApp(app) {
-      const name = appName(app.id);
+      const name = app.name || app.id;
       const arches = (app.arches || [])
         .map(a => `<span class="badge-gray">${a}</span>`).join('');
       const runtimeCmd = app.runtime
@@ -148,6 +143,10 @@
           ${cmdBlock(runtimeCmd)}
         </div>` : '';
 
+      const descBlock = app.description
+        ? `<p class="text-sm muted mb-4">${app.description}</p>`
+        : '';
+
       return `
         <div class="card">
           <div class="flex items-center gap-2 flex-wrap mb-1">
@@ -155,7 +154,8 @@
             <span class="badge-green">${app.version || '…'}</span>
             ${arches}
           </div>
-          <div class="font-mono text-xs muted mb-4">${app.id}</div>
+          <div class="font-mono text-xs muted mb-2">${app.id}</div>
+          ${descBlock}
 
           <details class="group">
             <summary class="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
