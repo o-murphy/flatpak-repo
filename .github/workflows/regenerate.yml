@@ -70,7 +70,11 @@ jobs:
           existing = {}
           if os.path.exists('apps.json'):
               with open('apps.json') as f:
-                  existing = json.load(f)
+                  data = json.load(f)
+                  if isinstance(data, list):
+                      existing = {a['id']: a for a in data if 'id' in a}
+                  else:
+                      existing = data
 
           refs = subprocess.check_output(['ostree', 'refs', '--repo', REPO]).decode().splitlines()
 

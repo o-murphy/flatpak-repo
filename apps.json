@@ -1,5 +1,5 @@
-[
-  {
+{
+  "io.github.o_murphy.ebalistyka": {
     "id": "io.github.o_murphy.ebalistyka",
     "name": "eBalistyka",
     "description": "eBalistyka is a professional ballistic calculator for shooters.\n      Supports trajectory calculation, wind drift, multiple ammo profiles,\n      and custom reticle overlays.",
@@ -13,4 +13,4 @@
     "runtime": "org.gnome.Platform/49",
     "runtime_remote": "flathub"
   }
-]
+}
