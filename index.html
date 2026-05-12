@@ -156,9 +156,9 @@
         : '';
 
       return `
-        <div class="card">
+        <div class="card" id="${app.id}">
           <div class="flex items-center gap-2 flex-wrap mb-1">
-            <span class="font-semibold text-base">${name}</span>
+            <a href="#${app.id}" class="font-semibold text-base hover:underline">${name}</a>
             <span class="badge-green">${app.version || '…'}</span>
             ${arches}
           </div>
@@ -208,13 +208,23 @@
       try {
         const res = await fetch('apps.json');
         if (!res.ok) throw new Error();
-        apps = await res.json();
+        const data = await res.json();
+        apps = Array.isArray(data) ? data : Object.values(data);
       } catch {
         list.innerHTML = '<p class="text-red-500 text-sm">Could not load apps.json — run the publish workflow first.</p>';
         return;
       }
       list.innerHTML = apps.map(renderApp).join('');
       enforceOneOpen();
+
+      if (location.hash) {
+        const el = document.querySelector(location.hash);
+        if (el) {
+          const details = el.querySelector('details');
+          if (details) details.open = true;
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
     }
 
     init();
