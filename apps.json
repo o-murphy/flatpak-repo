@@ -4,7 +4,7 @@
     "name": "eBalistyka",
     "description": "eBalistyka is a professional ballistic calculator for shooters. Supports trajectory calculation, wind drift, multiple ammo profiles, and custom reticle overlays.",
     "branch": "master",
-    "version": "v0.1.16",
+    "version": "v0.1.17",
     "commits": {
       "aarch64": "62f28c4d5b89803df0d5797e6ab9e591693ce602e01fa6aad781486d1d85da73",
       "x86_64": "8b1cdd6901e6aea3da223a12d3818c7abdabaf3933e43e0c20959139adbf8741"
@@ -17,6 +17,13 @@
     "runtime": "org.freedesktop.Platform/25.08",
     "runtime_remote": "flathub",
     "versions": [
+      {
+        "version": "v0.1.17",
+        "commits": {
+          "aarch64": "62f28c4d5b89803df0d5797e6ab9e591693ce602e01fa6aad781486d1d85da73",
+          "x86_64": "8b1cdd6901e6aea3da223a12d3818c7abdabaf3933e43e0c20959139adbf8741"
+        }
+      },
       {
         "version": "v0.1.16",
         "commits": {
